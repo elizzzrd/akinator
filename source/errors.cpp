@@ -18,10 +18,11 @@ const char * tree_error_string(ErrorCode error)
         "Deletion failed",
         "Invalid key",
         "Node data corruption",
-        "Tree is empty"
+        "Tree is empty",
+        "Error during adding object to database"
     };
     
-    if (error < SUCCESS || error > TREE_EMPTY_TREE) return "Unknown error";
+    if (error < SUCCESS || error > TREE_ADDING_TO_DATABASE_ERROR) return "Unknown error";
     
     return tree_error_strings[error];
 }
@@ -30,10 +31,17 @@ const char * tree_error_string(ErrorCode error)
 
 void print_node(Node_t * node) //INORDER    
 {
+    if (!node)  return;
+
     printf("(");
     if (node -> left)
         print_node(node -> left);
-    printf("%d", node -> data);
+    
+    if (node -> data)
+        printf("%s", node -> data);
+    else
+        printf("[NULL]");
+
     if (node -> right)
         print_node(node -> right);
     printf(")");
@@ -44,24 +52,28 @@ void tree_graph_dump_nodes(FILE * dot_fp, const Node_t * node)
     if (!node) return;
     const char * fillcolor = "#d1c5efff";
 
+    const char *node_data = (node->data) ? node->data : "[NULL_DATA]";
+    const char *left_label = "YES";
+    const char *right_label = "NO";
+
     if (node->left != NULL && node->right != NULL)
     {
         fprintf(dot_fp, 
-        "    node_%p [fillcolor = \"%s\", label=\"{ <ptr> %p | <d> %d | {<l> %p |<r> %p}}\"];\n", 
-        (const void*)node, fillcolor, (const void*)node, node->data, (const void*)node->left, (const void*)node->right);
+        "    node_%p [fillcolor = \"%s\", label=\"{ <d> %s | {<l> %s |<r> %s}}\"];\n", 
+        (const void*)node, fillcolor, node_data, left_label, right_label);
     }
     else if (node->left == NULL && node->right != NULL)
         fprintf(dot_fp, 
-        "    node_%p [fillcolor = \"%s\", label=\"{ <ptr> %p | <d> %d | {<l> %s |<r> %p}}\"];\n", 
-        (const void*)node, fillcolor, (const void*)node, node->data, "NULL", (const void*)node->right);
+        "    node_%p [fillcolor = \"%s\", label=\"{ <d> %s | {<l> %s |<r> %s}}\"];\n", 
+        (const void*)node, fillcolor, node_data, "NULL", right_label);
     else if (node->right == NULL && node->left != NULL)
         fprintf(dot_fp, 
-        "    node_%p [fillcolor = \"%s\", label=\"{ <ptr> %p | <d> %d | {<l> %p |<r> %s}}\"];\n", 
-        (const void*)node, fillcolor, (const void*)node, node->data, (const void*)node->left, "NULL");
+        "    node_%p [fillcolor = \"%s\", label=\"{ <d> %s | {<l> %s |<r> %s}}\"];\n", 
+        (const void*)node, fillcolor, node_data, left_label, "NULL");
     else
         fprintf(dot_fp, 
-        "    node_%p [fillcolor = \"%s\", label=\"{ <ptr> %p | <d> %d | {<l> %s |<r> %s}}\"];\n", 
-        (const void*)node, fillcolor, (const void*)node, node->data, "NULL", "NULL");
+        "    node_%p [fillcolor = \"%s\", label=\"{ <d> %s | {<l> %s |<r> %s}}\"];\n", 
+        (const void*)node, fillcolor, node_data, "NULL", "NULL");
     
 
     if (node -> left)
@@ -114,16 +126,15 @@ void tree_graph_dump(Tree_t * tree, const char *filename_dot, const char *filena
         "    edge [fontname=\"Consolas\", arrowsize=0.8];\n\n");
     fprintf(dot_fp, "\n");
 
-    
-    tree_graph_dump_nodes(dot_fp, tree->root);
-    fprintf(dot_fp, 
-        "    node_%p [fillcolor = \"#f89898ff\", label=\"{<r> root| tree_size = %d}\"];\n", 
-        (const void*)tree, tree->tree_size);
-    fprintf(dot_fp, "\n");
-
-    tree_graph_dump_edges(dot_fp, tree->root);
-    if (tree->root)
+    if (tree -> root)
     {
+        tree_graph_dump_nodes(dot_fp, tree->root);
+        fprintf(dot_fp, 
+            "    node_%p [fillcolor = \"#f89898ff\", label=\"{<r> root| tree_size = %d}\"];\n", 
+            (const void*)tree, tree->tree_size);
+        fprintf(dot_fp, "\n");
+    
+        tree_graph_dump_edges(dot_fp, tree->root);
         fprintf(dot_fp, 
             "    node_%p -> node_%p [color = \"#f89898ff\", penwidth=1];\n",
         (const void*)tree, (const void*)tree->root);
@@ -141,42 +152,87 @@ void tree_graph_dump(Tree_t * tree, const char *filename_dot, const char *filena
 }
 
 
-
 void make_html()
 {
-    FILE * html_fp = fopen(HTML_FILE, "w");
+    FILE *html_fp = fopen(HTML_FILE, "w");
     if (!html_fp)
-        {
+    {
         fprintf(stderr, "Cannot open file %s\n", HTML_FILE);
         return;
     }
 
-    fprintf(html_fp, 
-            "<!DOCTYPE html>\n"
-            "<html lang=\"en\">\n"
-            "<head>\n"
-            "\t<meta charset=\"UTF-8\">\n"
-            "\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
-            "\t<title>Struct of data: trees</title>\n"
-            "\t<style>\n"
-            "\timg {\n"
-            "\t\tmax-width: 100%%;\n"
-            "\t\theight: auto;\n"
-            "\t\tdisplay: block;\n"
-            "\t}\n"
-            "\t</style>\n"
-            "</head>\n"
-            "<body>\n"
-            "\t<h1>Debug page</h1>\n");
+    fprintf(html_fp,
+        "<!DOCTYPE html>\n"
+        "<html lang=\"en\">\n"
+        "<head>\n"
+        "\t<meta charset=\"UTF-8\">\n"
+        "\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+        "\t<title>Struct of data: trees</title>\n"
+        "\t<style>\n"
+        "\tbody {\n"
+        "\t\tfont-family: Consolas, monospace;\n"
+        "\t\tbackground-color: #f4f4f8;\n"
+        "\t\tmargin: 0;\n"
+        "\t\tpadding: 20px;\n"
+        "\t\tcolor: #333;\n"
+        "\t}\n"
+        "\th1 {\n"
+        "\t\ttext-align: center;\n"
+        "\t\tcolor: #222;\n"
+        "\t\tmargin-bottom: 30px;\n"
+        "\t}\n"
+        "\t.container {\n"
+		"\tdisplay: flex;\n"
+		"flex-direction: column;\n" 
+		"align-items: center;\n"    
+		"gap: 20px;\n"  
+        "\t}\n"
+        "\t.card {\n"
+        "\t\tbackground: #fff;\n"
+        "\t\tborder-radius: 10px;\n"
+        "\t\tbox-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);\n"
+        "\t\tpadding: 15px;\n"
+        "\t\twidth: 100%%;\n"
+        "\t\tmax-width: 600px;\n"
+        "\t\ttext-align: center;\n"
+        "\t\ttransition: transform 0.2s ease-in-out;\n"
+        "\t}\n"
+        "\t.card:hover { transform: scale(1.02); }\n"
+        "\timg {\n"
+        "\t\twidth: 100%%;\n"
+		"\t\theight: auto;\n"
+		"\t\tmax-height: 600px;\n"
+        "\t\tobject-fit: contain;\n"
+        "\t\tbackground-color: #fafafa;\n"
+        "\t\tborder: 1px solid #ddd;\n"
+        "\t\tborder-radius: 6px;\n"
+        "\t}\n"
+        "\tp {\n"
+        "\t\tfont-size: 14px;\n"
+        "\t\tcolor: #555;\n"
+        "\t\tmargin: 10px 0;\n"
+        "\t}\n"
+        "\t</style>\n"
+        "</head>\n"
+        "<body>\n"
+        "\t<h1>Debug page</h1>\n"
+        "\t<div class=\"container\">\n");
 
     extern int count;        
     for (int i = 1; i <= count; i++)
     {
-        fprintf(html_fp, "\t\t<p>dump call: %d</p>\n", i);
-        fprintf(html_fp, "\t\t<img src=\"logger/graph%d.png\" alt=\"graph%d\" class=\"img\">\n", i, i);
+        fprintf(html_fp,
+            "\t\t<div class=\"card\">\n"
+            "\t\t\t<p>Dump call: %d</p>\n"
+            "\t\t\t<img src=\"logger/graph%d.png\" alt=\"graph%d\">\n"
+            "\t\t</div>\n",
+            i, i, i);
     }
 
-    fprintf(html_fp, "</body>\n</html>\n");
+    fprintf(html_fp,
+        "\t</div>\n"
+        "</body>\n"
+        "</html>\n");
+
     fclose(html_fp);
 }
-

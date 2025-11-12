@@ -1,6 +1,6 @@
 #pragma once
 
-typedef int TreeElem_t; 
+typedef char * TreeElem_t; 
 
 typedef enum 
 {
@@ -13,13 +13,15 @@ typedef enum
     TREE_DATA_CORRUPTION,
     TREE_EMPTY_TREE,
 
+    TREE_ADDING_TO_DATABASE_ERROR,
+
 } ErrorCode;
 
 typedef struct treenode 
 {
     TreeElem_t data;
-    struct treenode * left;
-    struct treenode * right;
+    struct treenode * left; // ответ да
+    struct treenode * right; // ответ нет
 } Node_t;
 
 typedef struct 

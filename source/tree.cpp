@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <string.h>
 #include <stdlib.h>
 #include "tree.h"
 #include "errors.h"
@@ -32,10 +33,17 @@ Node_t * init_node(TreeElem_t data, ErrorCode * error)
     }
     else
     {
-        new_node->data = data;
+        new_node->data = strdup(data);
+        if (!new_node->data)
+        {
+            free(new_node);
+            *error = TREE_MEMORY_ALLOCATION_ERROR;
+            return NULL;
+        }
         new_node->left = NULL;
         new_node->right = NULL;
     }
+    *error = SUCCESS;
     return new_node;
 }
 
@@ -119,6 +127,7 @@ Node_t * add_item(TreeElem_t data, Tree_t * tree, ErrorCode * error)
     if (tree->root && (seek_item(data, tree, error) != NULL))
     {
         *error = TREE_DUPLICATE_VALUE;
+        fprintf(stderr, "An attempt to add an already existing element"); // возврат из функцией с просьбой повторить попытку
         return NULL;
     }
     
@@ -140,8 +149,6 @@ Node_t * add_item(TreeElem_t data, Tree_t * tree, ErrorCode * error)
 }
 
 
-
-
 void destroy_node(Node_t * node, ErrorCode * error, Tree_t * tree)
 {
     if (node == NULL) 
@@ -157,7 +164,11 @@ void destroy_node(Node_t * node, ErrorCode * error, Tree_t * tree)
     
     node->left = NULL;
     node->right = NULL;  
-    node->data = 0;  
+    if (node->data)
+        {
+            free(node->data);
+            node->data = NULL; 
+        }
     free(node);
     
     if (error)
@@ -176,32 +187,51 @@ void destroy_tree(Tree_t * tree, ErrorCode * error)
     GRAPH_DUMP(count);
     
     destroy_node(tree->root, error,tree);
-    tree->root = NULL;
     tree->tree_size = 0;
     
     *error = SUCCESS;
     count++;
-    GRAPH_DUMP(count);
+    //GRAPH_DUMP(count);
     return;
 }
 
 
-bool ToLeft(const TreeElem_t data1, const TreeElem_t data2)
+// bool ToLeft(const Node_t node_to_add, const Node_t existing_node)
+// {
+//     printf("%s %s\n", node_to_add.data, existing_node.data);
+//     char option[10]= {};
+    
+// }
+
+
+// bool ToRight(const TreeElem_t data1, const TreeElem_t data2)
+// {
+//     if (data1 > data2)
+//         return true;
+//     else
+//         return false;
+// }
+
+
+bool ToLeft(const TreeElem_t i1, const TreeElem_t i2)
 {
-    if (data1 < data2)
+    int comp1;
+    if ((comp1 = strcmp(i1, i2)) < 0)
+        return true;
+    else if (comp1 == 0 && strcmp(i1, i2) < 0)
         return true;
     else
         return false;
 }
 
-
-bool ToRight(const TreeElem_t data1, const TreeElem_t data2)
+bool ToRight(const TreeElem_t i1, const TreeElem_t i2)
 {
-    if (data1 > data2)
+    int comp1;
+    if ((comp1 = strcmp(i1, i2)) > 0)
+        return true;
+    else if (comp1 == 0 && strcmp(i1, i2) > 0)
         return true;
     else
         return false;
 }
-
-
 
