@@ -17,35 +17,18 @@ const char * tree_error_string(ErrorCode error)
         "Dublicate key adding",
         "Deletion failed",
         "Invalid key",
-        "Node data corruption",
         "Tree is empty",
-        "Error during adding object to database"
+        "Error during adding object to database",
+        "Can not open the file",
+        "Error during loading database"    
     };
     
-    if (error < SUCCESS || error > TREE_ADDING_TO_DATABASE_ERROR) return "Unknown error";
+    if (error < SUCCESS || error > TREE_LOADING_DATABASE_ERROR) 
+        return "Unknown error";
     
     return tree_error_strings[error];
 }
 
-
-
-void print_node(Node_t * node) //INORDER    
-{
-    if (!node)  return;
-
-    printf("(");
-    if (node -> left)
-        print_node(node -> left);
-    
-    if (node -> data)
-        printf("%s", node -> data);
-    else
-        printf("[NULL]");
-
-    if (node -> right)
-        print_node(node -> right);
-    printf(")");
-}
 
 void tree_graph_dump_nodes(FILE * dot_fp, const Node_t * node)
 {
@@ -101,7 +84,7 @@ void tree_graph_dump_edges(FILE * dot_fp, const Node_t * node)
     tree_graph_dump_edges(dot_fp, node->right);
 }
 
-void tree_graph_dump(Tree_t * tree, const char *filename_dot, const char *filename_png)
+void tree_graph_dump(Tree_t * tree, const char * filename_dot, const char * filename_png)
 {
     if (!tree)
     {
@@ -218,8 +201,8 @@ void make_html()
         "\t<h1>Debug page</h1>\n"
         "\t<div class=\"container\">\n");
 
-    extern int count;        
-    for (int i = 1; i <= count; i++)
+    extern int graph_dump_count;        
+    for (int i = 1; i <= graph_dump_count; i++)
     {
         fprintf(html_fp,
             "\t\t<div class=\"card\">\n"

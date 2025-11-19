@@ -6,30 +6,29 @@
 #include "tree.h"
 #include "errors.h"
 
-int count = 0;
+int graph_dump_count = 0;
 
 
-void init_tree(Tree_t * tree)
+ErrorCode init_tree(Tree_t * tree)
 {
-    tree->root = NULL;
-    tree->tree_size = 0;
+    tree -> tree_size = 1;
+    char str[] = "Unknown object";
+    Node_result_t root = init_node(str, tree);
+    tree->root = root.node;
+    GRAPH_DUMP(tree);
+    return root.error;
 }
 
-bool tree_is_empty(const Tree_t * tree)
+Node_result_t init_node(TreeElem_t data, Tree_t * tree)
 {
-    if (tree->root == NULL)
-        return true;
-    else
-        return false;
-}
+    assert(data);
+    Node_result_t res = {.error = SUCCESS};
 
-Node_t * init_node(TreeElem_t data, ErrorCode * error)
-{
     Node_t * new_node = (Node_t *) calloc(1, sizeof(Node_t));
-    if (!new_node)
+    if (!new_node) 
     {
-        *error = TREE_MEMORY_ALLOCATION_ERROR; 
-        return NULL;
+        ERROR_MESSAGE(TREE_MEMORY_ALLOCATION_ERROR, res.error); 
+        return res;
     }
     else
     {
@@ -37,28 +36,33 @@ Node_t * init_node(TreeElem_t data, ErrorCode * error)
         if (!new_node->data)
         {
             free(new_node);
-            *error = TREE_MEMORY_ALLOCATION_ERROR;
-            return NULL;
+            ERROR_MESSAGE(TREE_MEMORY_ALLOCATION_ERROR, res.error);
+            return res;
         }
+
         new_node->left = NULL;
         new_node->right = NULL;
+        new_node->prev = NULL;
     }
-    *error = SUCCESS;
-    return new_node;
+
+    res.error = SUCCESS; res.node = new_node;
+    return res;
 }
 
-Node_t * seek_item(const TreeElem_t data, const Tree_t * tree, ErrorCode * error) 
+
+Node_result_t seek_digit(const TreeElem_t data, const Tree_t * tree) 
 {
+    assert(tree);
+    Node_result_t res = {};
     if (!tree)
     {
-        *error = TREE_NULL_POINTER;
-        return NULL;
+        ERROR_MESSAGE(TREE_NULL_POINTER, res.error);
+        return res;
     } 
-
     if(!tree->root)
     {
-        *error = TREE_EMPTY_TREE;
-        return NULL;
+        ERROR_MESSAGE(TREE_EMPTY_TREE, res.error);
+        return res;
     }
 
     Node_t * current_node = tree->root;
@@ -71,22 +75,33 @@ Node_t * seek_item(const TreeElem_t data, const Tree_t * tree, ErrorCode * error
             current_node = current_node->right;
         else 
         {
-            *error = SUCCESS;
-            return current_node;
+            res.error = SUCCESS;
+            res.node = current_node;
+            return res;
         }
     }
 
-    //printf("element %d not found in tree\n", data);
-    //*error = TREE_INVALID_KEY;
-    return NULL;
+    res.error = TREE_INVALID_KEY;
+    res.node = NULL;
+    return res;
 }
 
-void add_node(Node_t * node, Node_t * root, ErrorCode * error)
-{
-    if (!node || !root)
+
+ErrorCode add_node(Node_t * node, Node_t * root) // TODO: fix by adding root by default 
+{                                           // TODO: use return (pass the errorcode)
+    assert(node);
+    assert(root);
+
+    ErrorCode error = SUCCESS;
+    if (!node)     
     {
-        *error = TREE_NULL_POINTER;
-        return;
+        ERROR_MESSAGE(TREE_NULL_POINTER, error);
+        return error;
+    }
+    if (!root)
+    {
+        ERROR_MESSAGE(TREE_EMPTY_TREE, error);
+        return error;
     }
     
     if (ToLeft(node->data, root->data))
@@ -94,144 +109,181 @@ void add_node(Node_t * node, Node_t * root, ErrorCode * error)
         if (root->left == NULL)     
         {
             root->left = node;
-            return;
+            node->prev = root;
+            return SUCCESS;
         }
         else 
-        add_node(node, root->left, error);
+            add_node(node, root->left);
     }
     else if (ToRight(node->data, root->data))
     {
         if (root->right == NULL)    
         {
             root->right = node;
-            return;
+            node->prev = root;
+            return SUCCESS;
         }
         else                        
-            add_node(node, root->right, error);
+            add_node(node, root->right);
     }
+    else    
+    {
+        error = TREE_DUPLICATE_VALUE;
+        return error;
+    }
+    return error;
+}
+
+
+Node_result_t add_item(TreeElem_t data, Tree_t * tree)
+{
+    assert(tree);
+    Node_result_t res = {};
+    if (!tree->root)
+    {
+        ERROR_MESSAGE(TREE_EMPTY_TREE, res.error);
+        return res;
+    }
+    
+    Node_result_t seek = seek_digit(data, tree);
+    Node_t * node_with_same_data = seek.node;
+    if (tree->root && node_with_same_data != NULL)
+    {
+        ERROR_MESSAGE(TREE_DUPLICATE_VALUE, res.error);
+        res.node = NULL;
+        return res;
+    }
+    
+    Node_result_t node_struct = init_node(data, tree);
+    if (node_struct.error != SUCCESS)
+    {
+        res.error = node_struct.error;
+        return res;
+    }
+
+    Node_t * new_node = node_struct.node;
+    res.error = add_node(new_node, tree->root);
+    if (res.error == SUCCESS)
+        tree->tree_size++;
     else
     {
-        *error = TREE_DUPLICATE_VALUE;
-    }
-}
-
-Node_t * add_item(TreeElem_t data, Tree_t * tree, ErrorCode * error)
-{
-    assert(*error == SUCCESS);
-    
-    if (!tree)
-    {
-        *error = TREE_NULL_POINTER;
-        return NULL;
-    }
-    if (tree->root && (seek_item(data, tree, error) != NULL))
-    {
-        *error = TREE_DUPLICATE_VALUE;
-        fprintf(stderr, "An attempt to add an already existing element"); // возврат из функцией с просьбой повторить попытку
-        return NULL;
+        res.node = NULL;
+        return res;
     }
     
-    *error = SUCCESS;
-    Node_t * new_node = init_node(data, error);
-    if (*error != SUCCESS)
-    {
-        fprintf(stderr, "Could not create node\n");
-        return NULL;
-    }
-    
-    if (tree->root == NULL)         tree->root = new_node;
-    else                            add_node(new_node, tree->root, error);
-    
-    if (*error == SUCCESS) tree->tree_size++;
-    count++;
-    GRAPH_DUMP(count);
-    return new_node;
+    GRAPH_DUMP(tree);
+    res.node = new_node;
+    return res;
 }
 
 
-void destroy_node(Node_t * node, ErrorCode * error, Tree_t * tree)
+void destroy_node(Node_t * node) 
 {
-    if (node == NULL) 
-    {
-        //*error = TREE_NULL_POINTER;
-        return;
-    }
-    
-    if (node->left)
-    destroy_node(node->left, error, tree);
-    if (node->right)
-    destroy_node(node->right, error, tree);
+    assert(node);
+
+    if (node->left)     destroy_node(node->left);
+    if (node->right)    destroy_node(node->right);
     
     node->left = NULL;
-    node->right = NULL;  
+    node->right = NULL;
+    node->prev = NULL;  
     if (node->data)
         {
             free(node->data);
             node->data = NULL; 
         }
     free(node);
-    
-    if (error)
-    *error = SUCCESS;
     return;
 }
 
 
-void destroy_tree(Tree_t * tree, ErrorCode * error)
+void destroy_tree(Tree_t * tree)
 {
-    if (!tree)
-    {
-        *error = TREE_NULL_POINTER;
-        return;
-    }
-    GRAPH_DUMP(count);
+    assert(tree);
+    GRAPH_DUMP(tree);
     
-    destroy_node(tree->root, error,tree);
+    destroy_node(tree->root);
     tree->tree_size = 0;
-    
-    *error = SUCCESS;
-    count++;
-    //GRAPH_DUMP(count);
     return;
 }
 
 
-// bool ToLeft(const Node_t node_to_add, const Node_t existing_node)
-// {
-//     printf("%s %s\n", node_to_add.data, existing_node.data);
-//     char option[10]= {};
+bool ToLeft(const TreeElem_t data1, const TreeElem_t data2)
+{
+    if (data1 <= data2)
+        return true;
+    else
+        return false;
+}
+
+
+bool ToRight(const TreeElem_t data1, const TreeElem_t data2)
+{
+    if (data1 > data2)
+        return true;
+    else
+        return false;
+}
+
+
+ErrorCode build_parent_links(Tree_t * tree)
+{
+    assert(tree);
     
-// }
+    if (!tree->root)
+    {
+        return TREE_EMPTY_TREE;
+    }
+    
+    tree->root->prev = NULL;
+    
+    return build_parent_links_recursive(tree->root, tree);
+}
+
+ErrorCode build_parent_links_recursive(Node_t * node, Tree_t * tree)
+{
+    if (!node)
+        return SUCCESS;
+    
+    if (node->left)
+    {
+        node->left->prev = node;
+        ErrorCode error = build_parent_links_recursive(node->left, tree);
+        if (error != SUCCESS)
+            return error;
+    }
+    
+    if (node->right)
+    {
+        node->right->prev = node;
+        ErrorCode error = build_parent_links_recursive(node->right, tree);
+        if (error != SUCCESS)
+            return error;
+    }
+    
+    return SUCCESS;
+}
 
 
-// bool ToRight(const TreeElem_t data1, const TreeElem_t data2)
+// bool ToLeft_str(const TreeElem_t i1, const TreeElem_t i2)
 // {
-//     if (data1 > data2)
+//     int comp1;
+//     if ((comp1 = strcmp(i1, i2)) < 0)
+//         return true;
+//     else if (comp1 == 0 && strcmp(i1, i2) < 0)
 //         return true;
 //     else
 //         return false;
 // }
 
-
-bool ToLeft(const TreeElem_t i1, const TreeElem_t i2)
-{
-    int comp1;
-    if ((comp1 = strcmp(i1, i2)) < 0)
-        return true;
-    else if (comp1 == 0 && strcmp(i1, i2) < 0)
-        return true;
-    else
-        return false;
-}
-
-bool ToRight(const TreeElem_t i1, const TreeElem_t i2)
-{
-    int comp1;
-    if ((comp1 = strcmp(i1, i2)) > 0)
-        return true;
-    else if (comp1 == 0 && strcmp(i1, i2) > 0)
-        return true;
-    else
-        return false;
-}
+// bool ToRight_str(const TreeElem_t i1, const TreeElem_t i2)
+// {
+//     int comp1;
+//     if ((comp1 = strcmp(i1, i2)) > 0)
+//         return true;
+//     else if (comp1 == 0 && strcmp(i1, i2) > 0)
+//         return true;
+//     else
+//         return false;
+// }
 
